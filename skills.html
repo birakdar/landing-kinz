@@ -53,7 +53,30 @@
         {
           "@type": "FAQPage",
           "mainEntity": [
-            {{"@type":"Question","name":"هل الدورة للمبتدئين تماماً؟","acceptedAnswer":{{"@type":"Answer","text":"نعم. نبدأ من الصفر بأسلوب عملي وواضح."}}}}, {{"@type":"Question","name":"هل يجب أن تكون أونلاين؟","acceptedAnswer":{{"@type":"Answer","text":"لا. يمكنك الدراسة أونلاين أو طلب حضور المدرس إليك."}}}}, {{"@type":"Question","name":"كيف أسجّل؟","acceptedAnswer":{{"@type":"Answer","text":"واتساب → استشارة مجانية → اختيار المسار والموعد."}}}}
+            {
+              "@type": "Question",
+              "name": "هل الدورة للمبتدئين تماماً؟",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "نعم. نبدأ من الصفر بأسلوب عملي وواضح."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "هل يجب أن تكون أونلاين؟",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "لا. يمكنك الدراسة أونلاين أو طلب حضور المدرس إليك."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "كيف أسجّل؟",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "واتساب → استشارة مجانية → اختيار المسار والموعد."
+              }
+            }
           ]
         }
       ]
@@ -61,34 +84,20 @@
     </script>
 </head>
 <body class="course-page font-sans antialiased min-h-screen">
-    <nav class="bg-white shadow-sm sticky top-0 z-50">
-        <div class="container mx-auto px-6 md:px-16 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
-            <div class="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
-            <a href="index.html#services" class="btn-back btn-back--nav" data-back-home aria-label="العودة إلى الصفحة الرئيسية">
-                <span aria-hidden="true">→</span>
-                رجوع
-            </a>
-            <a href="index.html" aria-label="كينز - الصفحة الرئيسية">
-                <picture><source srcset="images/kinz-logo.webp" type="image/webp"><img src="images/kinz-logo-180.png" alt="شعار منصة كينز التعليمية" class="h-12 md:h-16 w-auto" width="160" height="64" decoding="async"></picture>
-            </a>
-            </div>
-            <div class="flex items-center gap-4 md:gap-8 flex-wrap justify-center text-sm md:text-base font-bold text-[#1A2656]">
-                <a href="index.html#services" class="hover:text-[#FBB03B] transition-colors">الرئيسية</a>
-                <a href="english.html" class="hover:text-[#FBB03B] transition-colors">إنجليزي</a>
-                <a href="manahij.html" class="hover:text-[#FBB03B] transition-colors">مناهج</a>
-                <a href="skills.html" class="hover:text-[#FBB03B] transition-colors">مهارات</a>
-                <a href="index.html#faq" class="hover:text-[#FBB03B] transition-colors">أسئلة شائعة</a>
-            </div>
-        </div>
-    </nav>
-
-
     <header class="course-hero">
         <div class="course-wrap">
-            <a href="index.html#services" class="btn-back btn-back--hero" data-back-home>
-                <span aria-hidden="true">→</span>
-                العودة إلى الصفحة الرئيسية
-            </a>
+            <div class="course-hero__bar">
+                <a href="index.html#services" class="btn-back btn-back--hero" data-back-home>
+                    <span aria-hidden="true">→</span>
+                    رجوع
+                </a>
+                <a href="index.html" class="course-hero__logo" aria-label="كينز">
+                    <picture>
+                        <source srcset="images/kinz-logo.webp" type="image/webp">
+                        <img src="images/kinz-logo-180.png" alt="كينز" width="160" height="64" decoding="async">
+                    </picture>
+                </a>
+            </div>
             <p class="course-hero__eyebrow">كينز — أونلاين أو المدرس يأتي إليك</p>
             <h1 class="course-hero__title">مهارات تقنية وبرمجة في سوريا</h1>
             <p class="course-hero__lead">برمجة وتصميم ومهارات يطلبها سوق العمل — بأسلوب عملي للمبتدئين، أونلاين أو مع المدرس إن رغبت بالحضور الشخصي.</p>
@@ -181,6 +190,7 @@
                 <a href="english.html" class="hover:text-[#FBB03B] transition-colors">دورات إنجليزي</a>
                 <a href="manahij.html" class="hover:text-[#FBB03B] transition-colors">تقوية مناهج</a>
                 <a href="skills.html" class="hover:text-[#FBB03B] transition-colors">مهارات تقنية</a>
+                <a href="teach.html" class="hover:text-[#FBB03B] transition-colors">انضم كمدرس</a>
                 <a href="index.html#services" class="hover:text-[#FBB03B] transition-colors">الرئيسية</a>
             </nav>
             <p class="text-white font-semibold">كينز | أونلاين أو المدرس يأتي إليك</p>
