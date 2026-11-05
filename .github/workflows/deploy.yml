@@ -1,20 +1,20 @@
 # Deploys this static site to the kinz-ed.com nginx VPS over SSH/rsync.
 #
-# Required GitHub repo secrets (Settings → Secrets and variables → Actions):
-#   DEPLOY_HOST      — server IP or hostname (e.g. 46.101.103.189)
-#   DEPLOY_USER      — SSH username on the server
-#   DEPLOY_SSH_KEY   — private key whose public half is in authorized_keys (or a deploy user)
-#   DEPLOY_PATH      — absolute nginx web root (e.g. /var/www/kinz-ed.com)
+# Required GitHub repo secrets (same names as kinz-erp):
+#   REMOTE_HOST     — server IP or hostname
+#   REMOTE_USER     — SSH username on the server
+#   SERVER_SSH_KEY  — private key whose public half is in authorized_keys
+#   REMOTE_PATH     — absolute nginx web root (e.g. /var/www/kinz-ed.com)
+#   REMOTE_PORT     — SSH port
 #
 # Optional:
-#   DEPLOY_PORT      — SSH port (default 22)
-#   DEPLOY_KNOWN_HOSTS — full known_hosts line(s); if unset, the job keyscans DEPLOY_HOST
+#   SSH_PASSPHRASE  — passphrase for SERVER_SSH_KEY (leave empty if none)
 #
 # Server manager checklist:
-#   1. Create a deploy user (or reuse one) with write access to DEPLOY_PATH
-#   2. Generate an ed25519 key pair; put the private key in DEPLOY_SSH_KEY; add the public key to that user's ~/.ssh/authorized_keys
+#   1. Create a deploy user (or reuse one) with write access to REMOTE_PATH
+#   2. Put the private key in SERVER_SSH_KEY; add the public key to that user's ~/.ssh/authorized_keys
 #   3. Confirm nginx serves real files for /robots.txt and /sitemap.xml (not a fallback to index.html)
-#   4. Add the four required secrets on nazero3/landing-kinz
+#   4. Add the secrets above on nazero3/landing-kinz
 #   5. Re-run this workflow (Actions → Deploy to production → Run workflow) or push to main
 
 name: Deploy to production
@@ -40,14 +40,15 @@ jobs:
 
       - name: Check required secrets
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+          REMOTE_USER: ${{ secrets.REMOTE_USER }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          REMOTE_PATH: ${{ secrets.REMOTE_PATH }}
+          REMOTE_PORT: ${{ secrets.REMOTE_PORT }}
         run: |
           set -euo pipefail
           missing=0
-          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_PATH; do
+          for name in REMOTE_HOST REMOTE_USER SERVER_SSH_KEY REMOTE_PATH REMOTE_PORT; do
             if [ -z "${!name}" ]; then
               echo "::error::Missing repository secret: $name"
               missing=1
@@ -60,45 +61,54 @@ jobs:
 
       - name: Prepare SSH
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+          REMOTE_PORT: ${{ secrets.REMOTE_PORT }}
+          REMOTE_USER: ${{ secrets.REMOTE_USER }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SSH_PASSPHRASE: ${{ secrets.SSH_PASSPHRASE }}
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
-          port="${DEPLOY_PORT:-22}"
-          if [ -n "${DEPLOY_KNOWN_HOSTS:-}" ]; then
-            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          else
-            ssh-keyscan -p "$port" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
-          fi
+          ssh-keyscan -p "$REMOTE_PORT" -H "$REMOTE_HOST" >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
           {
             echo "Host deploy-target"
-            echo "  HostName $DEPLOY_HOST"
-            echo "  User ${{ secrets.DEPLOY_USER }}"
-            echo "  Port $port"
+            echo "  HostName $REMOTE_HOST"
+            echo "  User $REMOTE_USER"
+            echo "  Port $REMOTE_PORT"
             echo "  IdentityFile ~/.ssh/deploy_key"
             echo "  IdentitiesOnly yes"
             echo "  StrictHostKeyChecking yes"
           } > ~/.ssh/config
           chmod 600 ~/.ssh/config
 
+          eval "$(ssh-agent -s)"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+
+          if [ -n "${SSH_PASSPHRASE:-}" ]; then
+            printf '%s\n' '#!/bin/sh' "printf '%s\\n' \"\$SSH_PASSPHRASE\"" > ~/.ssh/askpass.sh
+            chmod 700 ~/.ssh/askpass.sh
+            DISPLAY=:0 SSH_ASKPASS="$HOME/.ssh/askpass.sh" SSH_ASKPASS_REQUIRE=force \
+              ssh-add ~/.ssh/deploy_key </dev/null
+          else
+            ssh-add ~/.ssh/deploy_key
+          fi
+
       - name: Smoke-test SSH
         run: |
           set -euo pipefail
-          ssh deploy-target "printf 'ok deploy user=%s path_exists=' \"\$(whoami)\"; test -d '${{ secrets.DEPLOY_PATH }}' && echo yes || echo no"
+          ssh deploy-target "printf 'ok deploy user=%s path_exists=' \"\$(whoami)\"; test -d '${{ secrets.REMOTE_PATH }}' && echo yes || echo no"
 
       - name: Rsync site files
         run: |
           set -euo pipefail
-          dest="${{ secrets.DEPLOY_PATH }}"
+          dest="${{ secrets.REMOTE_PATH }}"
           # Trailing slash on source: copy contents into web root
           rsync -az --delete \
             --exclude '.git/' \
@@ -112,7 +122,7 @@ jobs:
       - name: Verify critical URLs on disk
         run: |
           set -euo pipefail
-          dest="${{ secrets.DEPLOY_PATH }}"
+          dest="${{ secrets.REMOTE_PATH }}"
           ssh deploy-target "set -euo pipefail
             test -f '${dest}/index.html'
             test -f '${dest}/robots.txt'
