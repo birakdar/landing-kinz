@@ -1,4 +1,5 @@
-// Initialize Lucide Icons
 document.addEventListener("DOMContentLoaded", () => {
-    lucide.createIcons();
+    if (window.lucide) {
+        lucide.createIcons();
+    }
 });

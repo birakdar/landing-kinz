@@ -1,0 +1,126 @@
+# Deploys this static site to the kinz-ed.com nginx VPS over SSH/rsync.
+#
+# Required GitHub repo secrets (Settings → Secrets and variables → Actions):
+#   DEPLOY_HOST      — server IP or hostname (e.g. 46.101.103.189)
+#   DEPLOY_USER      — SSH username on the server
+#   DEPLOY_SSH_KEY   — private key whose public half is in authorized_keys (or a deploy user)
+#   DEPLOY_PATH      — absolute nginx web root (e.g. /var/www/kinz-ed.com)
+#
+# Optional:
+#   DEPLOY_PORT      — SSH port (default 22)
+#   DEPLOY_KNOWN_HOSTS — full known_hosts line(s); if unset, the job keyscans DEPLOY_HOST
+#
+# Server manager checklist:
+#   1. Create a deploy user (or reuse one) with write access to DEPLOY_PATH
+#   2. Generate an ed25519 key pair; put the private key in DEPLOY_SSH_KEY; add the public key to that user's ~/.ssh/authorized_keys
+#   3. Confirm nginx serves real files for /robots.txt and /sitemap.xml (not a fallback to index.html)
+#   4. Add the four required secrets on nazero3/landing-kinz
+#   5. Re-run this workflow (Actions → Deploy to production → Run workflow) or push to main
+
+name: Deploy to production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Rsync to VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check required secrets
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_PATH; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing repository secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Add secrets on the GitHub repo, then re-run this workflow."
+            exit 1
+          fi
+
+      - name: Prepare SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          port="${DEPLOY_PORT:-22}"
+          if [ -n "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$port" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          fi
+          chmod 644 ~/.ssh/known_hosts
+
+          {
+            echo "Host deploy-target"
+            echo "  HostName $DEPLOY_HOST"
+            echo "  User ${{ secrets.DEPLOY_USER }}"
+            echo "  Port $port"
+            echo "  IdentityFile ~/.ssh/deploy_key"
+            echo "  IdentitiesOnly yes"
+            echo "  StrictHostKeyChecking yes"
+          } > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+      - name: Smoke-test SSH
+        run: |
+          set -euo pipefail
+          ssh deploy-target "printf 'ok deploy user=%s path_exists=' \"\$(whoami)\"; test -d '${{ secrets.DEPLOY_PATH }}' && echo yes || echo no"
+
+      - name: Rsync site files
+        run: |
+          set -euo pipefail
+          dest="${{ secrets.DEPLOY_PATH }}"
+          # Trailing slash on source: copy contents into web root
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude '.cursor/' \
+            --exclude '.gitignore' \
+            --exclude '.DS_Store' \
+            -e 'ssh' \
+            ./ deploy-target:"${dest}/"
+
+      - name: Verify critical URLs on disk
+        run: |
+          set -euo pipefail
+          dest="${{ secrets.DEPLOY_PATH }}"
+          ssh deploy-target "set -euo pipefail
+            test -f '${dest}/index.html'
+            test -f '${dest}/robots.txt'
+            test -f '${dest}/sitemap.xml'
+            # robots.txt must not be the HTML homepage
+            if head -c 15 '${dest}/robots.txt' | grep -qi '<!DOCTYPE\\|<html'; then
+              echo 'robots.txt on server looks like HTML — fix nginx try_files / fallback' >&2
+              exit 1
+            fi
+            echo 'Deployed files look correct.'
+          "

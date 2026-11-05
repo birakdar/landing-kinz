@@ -1,0 +1,4 @@
+# Cursor / local tooling
+.cursor/
+.DS_Store
+*.log
